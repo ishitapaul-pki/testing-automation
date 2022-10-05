@@ -65,6 +65,25 @@ jobs:
               DestinationPath  = "BuildResult.zip"
               CompressionLevel = "Optimal"
           }    
+          Compress-Archive @Parameters
+          $zip_hash = (Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash
+          Write-Host -Object "BuildResult.zip SHA256 hash: $((Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash)"
+          echo "::set-output name=zip_hash::$zip_hash"
+          
+      - name: ReleaseNotesTemplate
+        id: read_release
+        run: |
+          $Parameters = @{
+            Uri             = "https://api.github.com/repos/ishitapaul-pki/testing-automation/releases"
+            UseBasicParsing = $true
+            Verbose         = $true
+          }
+          $Penultimate = (Invoke-RestMethod @Parameters).tag_name | Select-Object -Index 1
+          $html_url = ((irm "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs").jobs | Where-Object -FilterScript {$_.run_id -eq "${{ github.run_id }}"}).html_url
+          # https://en.wikipedia.org/wiki/Percent-encoding
+          $Release = (Get-Content -Path ReleaseNotesTemplate.md -Encoding utf8 -Raw).replace("%", "%25").replace("`n", "%0A").replace("`r", "%0D").replace("NewVersion", "${{ github.ref_name }}").replace("OldVersion", $Penultimate).replace("CurrentDate", $(Get-Date -f "dd.MM.yyyy")).replace("html_url", $html_url).replace("SHA256_hash", "${{ steps.zip_hash.outputs.zip_hash }}")
+          # https://trstringer.com/github-actions-multiline-strings/
+          echo "::set-output name=RELEASE_BODY::$Release"
                      
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v3
@@ -79,23 +98,3 @@ jobs:
               path: C-Sharp-master
 
       
-      - name: Command Line Script
-        run: |
-            cd C-Sharp-master\Utilities.Tests\bin\Debug\net5.0
-
-            git config --global user.email "Ishita.Paul@PerkinElmer.com"
-
-            git config --global user.name "ishitapaul-pki"
-
-            git init
-
-            git add .
-
-            git commit -m "test"
-
-            git remote add origin https://ishitapaul-pki:$GITHUB_TOKEN@github.com/ishitapaul-pki/testing-automation.git
-
-            git push https://ishitapaul-pki:$GITHUB_TOKEN@github.com/ishitapaul-pki/testing-automation.git
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
