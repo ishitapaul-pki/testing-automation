@@ -115,7 +115,7 @@ jobs:
           # appname
           appname: "${{ github.repository }}"
           # filepath
-          filepath: "C-Sharp-master/BuildResult/BuildResult.zip"
+          filepath: "D:/a/Testing-for-automation/Testing-for-automation/C-Sharp-master/BuildResult/BuildResult.zip"
           # version
           version: "${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
           # vid
@@ -131,7 +131,7 @@ jobs:
           # automatically delete the current scan if there are any errors when uploading files or starting the scan
           deleteincompletescan: false
           # specify version of the Java API Wrapper; default is latest
-          javawrapperversion: "v22.9.10.3"
+          #javawrapperversion: "v22.9.10.3"
         env:
           vid: ${{ secrets.VERACODE_ID }}
           vkey: ${{ secrets.VERACODE_SECRET }}
