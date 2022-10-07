@@ -28,7 +28,7 @@ jobs:
               persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal access token.
               fetch-depth: 0 # otherwise, there would be errors pushing refs to the destination repository.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: setup-msbuild
         uses: microsoft/setup-msbuild@v1.1
@@ -65,26 +65,12 @@ jobs:
               DestinationPath  = "BuildResult.zip"
               CompressionLevel = "Optimal"
           }    
-          Compress-Archive @Parameters
-          $zip_hash = (Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash
-          Write-Host -Object "BuildResult.zip SHA256 hash: $((Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash)"
-          echo "::set-output name=zip_hash::$zip_hash"
+          #Compress-Archive @Parameters
+          #$zip_hash = (Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash
+          #Write-Host -Object "BuildResult.zip SHA256 hash: $((Get-FileHash -Path BuildResult.zip -Algorithm SHA256).Hash)"
+          #echo "::set-output name=zip_hash::$zip_hash"
           
-      - name: ReleaseNotesTemplate
-        id: read_release
-        run: |
-          $Parameters = @{
-            Uri             = "https://api.github.com/repos/ishitapaul-pki/testing-automation/releases"
-            UseBasicParsing = $true
-            Verbose         = $true
-          }
-          $Penultimate = (Invoke-RestMethod @Parameters).tag_name | Select-Object -Index 1
-          $html_url = ((irm "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs").jobs | Where-Object -FilterScript {$_.run_id -eq "${{ github.run_id }}"}).html_url
-          # https://en.wikipedia.org/wiki/Percent-encoding
-          $Release = (Get-Content -Path ReleaseNotesTemplate.md -Encoding utf8 -Raw).replace("%", "%25").replace("`n", "%0A").replace("`r", "%0D").replace("NewVersion", "${{ github.ref_name }}").replace("OldVersion", $Penultimate).replace("CurrentDate", $(Get-Date -f "dd.MM.yyyy")).replace("html_url", $html_url).replace("SHA256_hash", "${{ steps.zip_hash.outputs.zip_hash }}")
-          # https://trstringer.com/github-actions-multiline-strings/
-          echo "::set-output name=RELEASE_BODY::$Release"
-                     
+                    
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v3
         with:
@@ -95,6 +81,57 @@ jobs:
         uses: actions/download-artifact@v3
         with: 
               name: BuildResult.zip
-              path: C-Sharp-master
+              path: C-Sharp-master\BuildResult
+        env:
+          GITHUB_TOKEN: ${{ github.token }} 
+          
+  scan:
+    needs: build
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
 
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+          
+      - name: Download a single artifact
+        uses: actions/download-artifact@v3
+        with: 
+              name: BuildResult.zip
+              path: C-Sharp-master\BuildResult
+        env:
+          GITHUB_TOKEN: ${{ github.token }}    
+        
+      - name: Veracode Upload And Scan
+        # You may pin to the exact commit or the version.
+        # uses: veracode/veracode-uploadandscan-action@35794dab9fbcd28fac19e44963f80646b27f4a7f
+        uses: veracode/veracode-uploadandscan-action@0.2.4
+        with:
+          # appname
+          appname: "${{ github.repository }}"
+          # filepath
+          filepath: "C-Sharp-master/BuildResult/BuildResult.zip"
+          # version
+          version: "${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
+          # vid
+          vid: "$vid"
+          # vkey
+          vkey: "$vkey"
+          # true or false
+          sandboxname: "viacord_myaccount"
+          # wait X minutes for the scan to complete
+          include: "*.dll"
+          # teams
+          teams: "Viacord"
+          # automatically delete the current scan if there are any errors when uploading files or starting the scan
+          deleteincompletescan: false
+          # specify version of the Java API Wrapper; default is latest
+          javawrapperversion: "v22.9.10.3"
+        env:
+          vid: ${{ secrets.VERACODE_ID }}
+          vkey: ${{ secrets.VERACODE_SECRET }}
